@@ -1,0 +1,127 @@
+
+/*    Preliminaries    */
+1. Download openmplab.tar from ccle.
+
+2. Copy openmplab.tar into lnxsrv and unzip the file.
+
+/*    Analyze the original code    */
+3. Find the FUNC TIME for the original func.c
+   $ make seq
+   $ ./seq
+   FUNC TIME : 0.492300
+   TOTAL TIME : 2.279106
+I made and executed the program several times and found the FUNC TIME was
+around 0.4~0.5. Here I copy down the output of one trial.
+
+4. Find the functions that I need to work on:
+   $ make clean
+   $ make seq GPROF=1
+   $ gprof seq | less
+   And here is the corresponding output:
+   
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  ms/call  ms/call  name    
+ 64.37      0.36     0.36       15    24.03    25.43  func1
+ 19.67      0.47     0.11  5177344     0.00     0.00  rand2
+  3.58      0.49     0.02   491520     0.00     0.00  findIndexBin
+  3.58      0.51     0.02        1    20.03   109.26  addSeed
+  3.58      0.53     0.02                             sequence
+  1.79      0.54     0.01       15     0.67     0.67  func4
+  1.79      0.55     0.01        1    10.01    10.01  imdilateDisk
+  1.79      0.56     0.01                             filter
+  0.00      0.56     0.00   983042     0.00     0.00  round
+  0.00      0.56     0.00       16     0.00     0.00  dilateMatrix
+  0.00      0.56     0.00       15     0.00     0.00  func2
+  0.00      0.56     0.00       15     0.00     0.00  func3
+  0.00      0.56     0.00       15     0.00     1.34  func5
+  0.00      0.56     0.00       15     0.00     0.00  rand1
+  0.00      0.56     0.00        2     0.00     0.00  get_time
+  0.00      0.56     0.00        1     0.00     0.00  elapsed_time
+  0.00      0.56     0.00        1     0.00     0.00  fillMatrix
+  0.00      0.56     0.00        1     0.00     0.00  func0
+  0.00      0.56     0.00        1     0.00     0.00  getNeighbors
+
+/*    Modify and check the speedup    */
+5. First I saved a copy of the original code:
+   $ make clean
+   $ cp func.c func0.c
+
+6. Modify on func.c
+
+After checking updates on piazza, I changed the server into lnxsrv07.
+(Followings are outputs based on lnxsrv07)
+
+Also, for the number of threads, I tried several different numbers, and I
+found that it worked best with 29 or 30. Here I choose to use 29.
+
+7. $ make omp MTRACE=1
+   gcc -o omp  -O3 -DMTRACE -fopenmp filter.c main.c func.c util.c -lm
+   $ ./omp
+   FUNC TIME : 0.037565
+   TOTAL TIME : 1.945903
+
+The speedup = 0.492300 / 0.037565 = 13.10
+Therefore the speedup is around 13.10x.
+
+(I made and executed the program several times, although the FUNC TIME
+flunctuated, it was almost in the range of 0.03~0.05.)
+
+/*    Check the output    */
+8. $ make check
+   gcc -o omp  -O3 -fopenmp filter.c main.c func.c util.c -lm
+   cp omp filter
+   ./filter
+   FUNC TIME : 0.039247
+   TOTAL TIME : 1.910572
+   diff --brief correct.txt output.txt
+
+No output after diff, which means the result is correct.
+
+/*    Check the memory leak    */
+According to the instructor note on piazza, we don't need to care about the
+memory leak issue. 
+9. $ make checkmem
+   mtrace filter mtrace.out || true
+   env: ‘./filter’: No such file or directory
+
+   Memory not freed:
+   -----------------
+              Address     Size     Caller
+   addr2line: 'filter': No such file
+   0x0000000001488060   0x1db8  at
+   0x0000000001489e20     0xc0  at
+   addr2line: 'filter': No such file
+   0x0000000001489ef0     0xf0  at
+   addr2line: 'filter': No such file
+   0x0000000001489ff0    0x240  at
+   0x000000000148a240    0x240  at
+   0x000000000148a490    0x240  at
+   0x000000000148a6e0    0x240  at
+   0x000000000148a930    0x240  at
+   0x000000000148ab80    0x240  at
+   0x000000000148add0    0x240  at
+   0x000000000148b020    0x240  at
+   0x000000000148b270    0x240  at
+   0x000000000148b4c0    0x240  at
+   0x000000000148b710    0x240  at
+   0x000000000148b960    0x240  at
+   0x000000000148bbb0    0x240  at
+   0x000000000148be00    0x240  at
+   0x000000000148c050    0x240  at
+   0x000000000148c2a0    0x240  at
+   0x000000000148c4f0    0x240  at
+   0x000000000148c740    0x240  at
+   0x000000000148c990    0x240  at
+   0x000000000148cbe0    0x240  at
+   0x000000000148ce30    0x240  at
+   0x000000000148d080    0x240  at
+   0x000000000148d2d0    0x240  at
+   0x000000000148d520    0x240  at
+   0x000000000148d770    0x240  at
+   0x000000000148d9c0    0x240  at
+   0x000000000148dc10    0x240  at
+   0x000000000148de60    0x240  at 
+
