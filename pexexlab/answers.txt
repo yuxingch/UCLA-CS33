@@ -1,0 +1,112 @@
+
+1. Explain why the instructions in the trace did not produce the correct
+mathematical result. Which instructions caused the problem, exactly?
+
+Ans: The instructions caused the problem are:
+(1)  0x0000000000541f40 <arith_driver+576>data.c:2645    imul %rdi,%rbx
+Before this instruction, rdi = 0xfffffc0000400001 and rbx = 0x1b55
+However, after imul, we got a number small than both orignal rdi and rbx:
+	 rbx = 0xff92ac06d5401b55
+which means it caused overflow.
+
+(2)  0x0000000000541efa <arith_driver+506>lisp.h:700     lea 0x0(,%rbx,4),%rax
+Since %rbx = 0xb38e48c71bd31c6f, 'lea 0x0(,%rbx,4),%rax' caused overflow and
+got rax = 0xce39231c6f4c71bc.
+
+2. Where did the number 2305843009213693951 come from? Explain in terms of the
+Emacs source code.
+
+Ans:
+In the source code data.c, we can see these lines at the bottom:
+  DEFVAR_LISP ("most-positive-fixnum", Vmost_positive_fixnum,
+               doc: /* The largest value that is representable in a Lisp integer.  */);
+  Vmost_positive_fixnum = make_number (MOST_POSITIVE_FIXNUM);
+
+It tells us that the "most-positive-fixnum" is equal to the value of "Vmost_
+positive_fixnum" and "Vmost_positive_fixnum" has the value of MOST_POSITIVE_
+FIXNUM.
+
+Now we check the source code in lisp.h:
+    #  define EMACS_INT_MAX INT_MAX
+This code define EMAC_INT_MAX as INT_MAX, which is equal to 0x7fffffffffffffff.
+
+L692: #define MOST_POSITIVE_FIXNUM (EMACS_INT_MAX >> INTTYPEBITS) 
+This code shows that MOST_POSITIVE_FIXNUM is formed by right shifting EMACS_INT
+_MAX by INTTYPEBITS.
+
+I look up INTTYPEBITS in lisp.h and find out that:
+INTTYPEBITS = = GCTYPEBITS - 1 and GCTYPEBITS is equal to 3.
+Therefore, INTTYPEBITS == 2.
+
+So it is formed by right-shifting 0x7fffffffffffffff by 2:
+     0x7fffffffffffffff >> 2 = 0x1fffffffffffffff =  2305843009213693951.
+
+3. Explain why the shell command emacs -batch -eval '(print (* most-positive-
+fixnum most-positive-fixnum))' outputs only 1.
+
+Ans:
+In data.c, we know that if there is a multiplication overflow, then the result
+will be masked with INTMASK:
+(L2637 to L2646)
+        case Amult:
+          if (INT_MULTIPLY_OVERFLOW (accum, next))
+            {
+              EMACS_UINT a = accum, b = next, ab = a * b;
+              overflow = 1;
+              accum = ab & INTMASK;
+            }
+          else
+            accum *= next;
+          break;
+
+When we multiply most-positive-fixnum by most-positive-fixnum, it overflows.
+Therefore, INTMASK will be applied to the result.
+From lisp.h, we can see that that INTMASK is defined by:
+     #define INTMASK (EMACS_INT_MAX >> (INTTYPEBITS - 1))
+From Question2, we got INTTYPEBITS == 2. Then,
+     INTMASK = 0x7fffffffffffffff >> 1, which is 0x3fffffffffffffff
+Here ab equals 0xc000000000000001:
+     0xc000000000000001
+   & 0x3fffffffffffffff
+   --------------------
+   = 0x0000000000000001
+
+Therefore, the command outputs only 1.
+
+4. Suppose it had also been compiled with -fsanitize=undefined. Explain any
+problems the trace would run into, or if there would not be a problem explain
+why not.
+
+Ans: 
+If it is compiled with -fsanitize=undefined, the compiler will detect the
+multiplication overflow at the runtime and call a certain function to handle
+the overflow. It will give us a warning message. In this case, the overflow
+will be handled by gcc.
+
+5. Similarly, discuss whether and how -fwrapv would have caused problems.
+
+Ans:
+-fwrapv would have caused problems.
+If we use -fwrapv, the compiler will automatically ignore the bits that exceed
+the limit (64 bits in this case). Since we multiply most-positive-fixnum by
+most-positive-fixnum, it overflows and the bits that exceed the limit are
+omitted. Therefore we get the wrong result.
+Moreover, unlike -fsanitize=undefined, the compiler won't give us any warning
+so we don't know whether it overflows or not.
+
+6. Suppose we assume -fwrapv is used. Suggest changes to how Emacs does integer
+multiplication that should help improve its performance.
+
+Ans:
+If we use -fwrapv, the compiler assumes that signed arithmetic overflow of
+multiplication wraps around using twos-complement representation.
+Checking integer overflow requires lots of steps. However, if we use -fwrapv,
+we no longer need Emacs to check integer overflow.
+
+7. How significant are the efficiency differences discussed above, in the
+context of Emacs execution?
+
+Ans:
+The efficiency differences are significant, since there will be much less
+instructions. 
+
