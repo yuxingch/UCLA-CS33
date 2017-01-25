@@ -49,7 +49,7 @@
    emacs foo.txt
    content:
 	 Test file
-	 Yuxing Chen
+	 yyxxxx ch
 	 Smashing lab
 	
    (1) run and verify thttpd-sp
@@ -65,7 +65,7 @@
    src/thttpd-as -p xxxx4 -D
    curl http://localhost:xxxx4/foo.txt
    	Test file
-        Yuxing Chen
+        yyxxxx ch
 	Smashing lab
    At the beginning, it worked correctly.
    Then after a while, it output:
