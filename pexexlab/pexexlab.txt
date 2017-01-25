@@ -1,0 +1,112 @@
+
+=== pexexlab.txt ===
+
+--- Gather Instruction Traces ---
+
+1. gdb ~eggert/bin64/bin/emacs-24.5
+Enter gdb to examine the behaviors of emacs-24.5
+
+2. r -batch -eval '(print (* 6997 -4398042316799 179))' 
+After hitting enter, the debuger output the result: -896699255797638033.
+It also says that the process exited normally.
+
+3. break Ftimes
+I used this command to set up break point at Ftimes in order to examine those
+instructions. Then the debugger prints the following information:
+    Breakpoint 1 at 0x542140: file data.c, line 2767.
+Then I successfully set the break point at Ftimes.
+
+4. set disassemble-next-line on
+This command is used to let the gdb directly give the assembly code for each
+line, starting from the breakpoint.
+
+5. set logging on
+It gave me file called gdb.txt which records all the assembly codes printed by
+gdb. Later on I can modify this file to generate trace.tr.
+
+6. r -batch -eval '(print (* 6997 -4398042316799 179))'
+Began to run the program and I got:
+Starting program: /w/fac.2/cs/eggert/bin64/bin/emacs-24.5 -batch -eval '(print (* 6997 -4398042316799 179))'
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib64/libthread_db.so.1".
+[New Thread 0x7fffe3189700 (LWP 41394)]
+
+Breakpoint 1, Ftimes (nargs=3, args=0x7fffffffd7a0) at data.c:2767
+2767	{
+=> 0x0000000000542140 <Ftimes+0>:	48 89 f2	mov    %rsi,%rdx
+
+This tells us that we meet the break point at Ftimes.
+
+7. Then I repeatedly use:
+   stepi
+   info registers
+to gather information for each line of assembly code.
+stepi: see each line of instructions
+Using 'info registers', I can detect if there are any changes in the registers.
+
+--- Examine Integer Overflow Handling ---
+
+0. Copy the code in the spec and paste it in newly created c-file 'testovf.c'.
+
+1. Compile with -O2
+I generated both .s file and .o file:
+(1) .s: gcc -S -O2 testovf.c
+Open testovf.s using emacs testovf.s
+Results:
+        .file   "testovf.c"
+        .text
+        .p2align 4,,15
+        .globl  testovf
+        .type   testovf, @function
+testovf:
+.LFB0:
+        .cfi_startproc
+        xorl    %eax, %eax
+        ret
+        .cfi_endproc
+.LFE0:
+        .size   testovf, .-testovf
+        .globl  big
+        .data
+        .align 8
+        .type   big, @object
+        .size   big, 8
+big:
+        .quad   9223372036854775807
+        .ident  "GCC: (GNU) 6.2.0"
+        .section        .note.GNU-stack,"",@progbits
+But since it is messy, I generated .o file:
+
+(2).o: gcc -c -O2 testovf.c
+       objdump -d testovf.o > 1.txt
+       And I opened the file in 1.txt:
+testovf.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000000 <testovf>:
+   0:   31 c0                   xor    %eax,%eax
+   2:   c3                      retq
+
+We can clearly see the instructions:
+   xor    %eax,%eax
+   retq
+as listed in .LFB0 in the .s file
+
+2. Compile with -O2 -fsanitize=undefined
+For the same reason, I generated both .s file and .o file:
+(1) .s: gcc -S -O2 -fsanitize=undefined testovf.c
+    open with 'emacs testovf.s'
+(2) .o: gcc -c -O2 -fsanitize=undefined testovf.c
+    	objdump -d testovf.o > 2.txt
+	And opened 2.txt in emacs to see the results
+
+3. Compile with -O2 -fwrapv
+For the same reason, I generated both .s file and .o file:
+(1) .s:	gcc -S -O2 -fwrapv testovf.c
+    open with 'emacs testovf.s'
+(2) .o:	gcc -c -O2 -fwrapv  testovf.c
+    	objdump	-d testovf.o > 3.txt
+        And opened 3.txt in emacs to see the results
+
